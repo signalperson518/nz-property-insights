@@ -1,10 +1,10 @@
 streamlit
 requests
-folium
-streamlit-folium
+folium==0.17.0
+streamlit-folium==0.23.0
 python-dotenv
-geopandas
 pandas
+geopandas
 shapely
 fiona
 pyproj
