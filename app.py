@@ -25,7 +25,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. 9 waddington dr or upper hutt college")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. 18 lanyon place, whitby, porirua or upper hutt college")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -169,7 +169,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
 
     st.markdown("### 🗺️ Map & Aerial View")
-    st.map(st.session_state.map_data, zoom=18)
+    st.map(st.session_state.map_data, zoom=17)
 
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
@@ -183,3 +183,4 @@ else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
 st.caption("Free open data: LINZ + Open Topo | v6.7 – Built in NZ 🇳🇿")
+
