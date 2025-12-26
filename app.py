@@ -1,3 +1,10 @@
+import subprocess
+import sys
+
+# Force install missing packages (Streamlit Cloud allows this)
+subprocess.check_call([sys.executable, "-m", "pip", "install", "folium", "streamlit-folium"])
+
+# Now normal imports
 import streamlit as st
 import requests
 import folium
@@ -205,5 +212,6 @@ if st.session_state.map_data and st.session_state.insights:
 
 else:
     st.info("Enter any NZ address or place (e.g. 'sky tower') and click Analyse – results stay!")
+
 
 st.caption("Free open data: LINZ + Stats NZ + Open Topo | v5.1 – Built in NZ 🇳🇿")
