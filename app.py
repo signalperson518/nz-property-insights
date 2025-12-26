@@ -3,11 +3,18 @@ import requests
 import os
 import pandas as pd
 
-# Use Streamlit secrets for keys
-LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
-GOOGLE_PLACES_KEY = st.secrets["GOOGLE_PLACES_KEY"]
+# Try Cloud secrets first, fallback to local .env
+try:
+    LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
+    GOOGLE_PLACES_KEY = st.secrets["GOOGLE_PLACES_KEY"]
+except:
+    # Local – load from .env
+    from dotenv import load_dotenv
+    load_dotenv()
+    LINZ_API_KEY = os.getenv("LINZ_API_KEY")
+    GOOGLE_PLACES_KEY = os.getenv("GOOGLE_PLACES_KEY")
 
-# Load real data CSVs (small, no big SHP)
+# Load real data CSVs
 pop_df = pd.read_csv('data/2023_Census_population_change_by_SA2_5545354433051253430.csv')
 income_df = pd.read_csv('data/2023_Census_totals_by_topic_for_households_by_SA2_-132143055565075773.csv')
 
@@ -25,7 +32,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. sky tower or plimmerton school")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. sky tower or aotea colleage")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -59,12 +66,6 @@ if st.button("🔍 Analyse Property", type="primary"):
         main_suburb = "Unknown"
         if len(address_parts) > 1:
             main_suburb = address_parts[1].strip().title()
-
-        # Fallback to input if formatted address doesn't have suburb
-        if main_suburb == "Unknown":
-            input_parts = address.split(',')
-            if len(input_parts) > 1:
-                main_suburb = input_parts[1].strip().title()
 
         # Demographics from main suburb
         income = "N/A"
@@ -168,4 +169,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Open Topo | v6.1 – Built in NZ 🇳🇿")
+st.caption("Free open data: LINZ + Open Topo | v6.3 – Built in NZ 🇳🇿")
