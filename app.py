@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import difflib  # For fuzzy match
 
 # Use Streamlit secrets for keys
 LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
@@ -24,7 +25,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. upper hutt college or 18 Lanyon Place, Whitby, Porirua")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. 9 waddington dr or upper hutt college")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -62,7 +63,7 @@ if st.button("🔍 Analyse Property", type="primary"):
         # Suburb display from formatted address
         suburb = main_suburb
 
-        # Demographics from main suburb (exact match first, then fallback)
+        # Demographics from main suburb (exact first, then fuzzy)
         income = "N/A"
         pop_2023 = "N/A"
         growth = "N/A"
@@ -71,10 +72,12 @@ if st.button("🔍 Analyse Property", type="primary"):
             # Exact match
             pop_match = pop_df[pop_df['main_suburb'] == main_suburb]
             if pop_match.empty:
-                # Fallback: look for containing name (e.g. "Upper Hutt" for "Trentham (Upper Hutt)")
-                containing = pop_df[pop_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
-                if not containing.empty:
-                    pop_match = containing.iloc[0:1]  # Take first
+                # Fuzzy match
+                all_subs = pop_df['main_suburb'].tolist()
+                fuzzy_match = difflib.get_close_matches(main_suburb, all_subs, n=1, cutoff=0.6)
+                if fuzzy_match:
+                    main_suburb = fuzzy_match[0]
+                    pop_match = pop_df[pop_df['main_suburb'] == main_suburb]
 
             if not pop_match.empty:
                 pop_cols = [col for col in pop_match.columns if '2023' in col and 'population' in col.lower()]
@@ -88,9 +91,11 @@ if st.button("🔍 Analyse Property", type="primary"):
 
             income_match = income_df[income_df['main_suburb'] == main_suburb]
             if income_match.empty:
-                containing = income_df[income_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
-                if not containing.empty:
-                    income_match = containing.iloc[0:1]
+                all_subs = income_df['main_suburb'].tolist()
+                fuzzy_match = difflib.get_close_matches(main_suburb, all_subs, n=1, cutoff=0.6)
+                if fuzzy_match:
+                    main_suburb = fuzzy_match[0]
+                    income_match = income_df[income_df['main_suburb'] == main_suburb]
 
             if not income_match.empty:
                 income_cols = [col for col in income_match.columns if 'median' in col.lower() and 'income' in col.lower()]
@@ -164,7 +169,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
 
     st.markdown("### 🗺️ Map & Aerial View")
-    st.map(st.session_state.map_data, zoom=16)
+    st.map(st.session_state.map_data, zoom=18)
 
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
@@ -177,4 +182,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Open Topo | v6.6 – Built in NZ 🇳🇿")
+st.caption("Free open data: LINZ + Open Topo | v6.7 – Built in NZ 🇳🇿")
