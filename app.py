@@ -1,10 +1,3 @@
-import subprocess
-import sys
-
-# Force install missing packages (Streamlit Cloud allows this)
-subprocess.check_call([sys.executable, "-m", "pip", "install", "folium", "streamlit-folium"])
-
-# Now normal imports
 import streamlit as st
 import requests
 import folium
@@ -215,3 +208,4 @@ else:
 
 
 st.caption("Free open data: LINZ + Stats NZ + Open Topo | v5.1 – Built in NZ 🇳🇿")
+
