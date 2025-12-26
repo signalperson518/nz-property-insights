@@ -3,3 +3,5 @@ requests
 folium
 streamlit-folium
 python-dotenv
+geopandas
+pandas
