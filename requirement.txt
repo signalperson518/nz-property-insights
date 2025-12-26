@@ -1,8 +1,3 @@
 streamlit
 requests
 pandas
-geopandas
-shapely
-fiona
-pyproj
-rtree
