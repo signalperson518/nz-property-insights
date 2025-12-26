@@ -20,12 +20,14 @@ if "map_data" not in st.session_state:
     st.session_state.map_data = pd.DataFrame()
 if "insights" not in st.session_state:
     st.session_state.insights = None
+if "show_boundaries" not in st.session_state:
+    st.session_state.show_boundaries = False
 
 st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. 18 lanyon place, whitby, porirua or upper hutt college")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. 18 lanyon place, whitby or upper hutt college")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -103,11 +105,12 @@ if st.button("🔍 Analyse Property", type="primary"):
                     income_val = income_match[income_cols[0]].iloc[0]
                     income = int(income_val) if pd.notna(income_val) else "N/A"
 
-        # Elevation
+        # Elevation – safe handling
         elev_url = f"https://api.opentopodata.org/v1/nzdem8m?locations={lat},{lon}"
         elev_response = requests.get(elev_url)
         elev_data = elev_response.json()
-        elevation = round(elev_data["results"][0]["elevation"], 1) if elev_data["status"] == "OK" else "N/A"
+        elev_value = elev_data["results"][0]["elevation"] if elev_data["status"] == "OK" and "elevation" in elev_data["results"][0] else None
+        elevation = round(elev_value, 1) if elev_value is not None else "N/A"
 
         # Flood/Coastal Risk
         if isinstance(elevation, float):
@@ -139,7 +142,9 @@ if st.button("🔍 Analyse Property", type="primary"):
             "risk_desc": risk_desc,
             "income": income,
             "pop": pop_2023,
-            "growth": growth
+            "growth": growth,
+            "lat": lat,
+            "lon": lon
         }
 
         # Map data
@@ -171,6 +176,31 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.markdown("### 🗺️ Map & Aerial View")
     st.map(st.session_state.map_data, zoom=17)
 
+    # Checkbox for property boundaries
+    st.session_state.show_boundaries = st.checkbox("Show property boundaries", value=st.session_state.show_boundaries)
+
+    if st.session_state.show_boundaries:
+        boundaries_url = f"https://tiles.linz.govt.nz/services;key={LINZ_API_KEY}/tiles/v4/layer=50767/EPSG:3857/{{z}}/{{x}}/{{y}}.png"
+        boundaries_html = f"""
+        <div id="boundaries-map" style="width:100%; height:600px;"></div>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script>
+            var boundaries_map = L.map('boundaries-map').setView([{i['lat']}, {i['lon']}], 18);
+            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+                attribution: '© OpenStreetMap'
+            }}).addTo(boundaries_map);
+            L.tileLayer('{boundaries_url}', {{
+                attribution: '© LINZ',
+                opacity: 0.6
+            }}).addTo(boundaries_map);
+            L.marker([{i['lat']}, {i['lon']}]).addTo(boundaries_map)
+                .bindPopup('{i['short_address']}')
+                .openPopup();
+        </script>
+        """
+        st.components.v1.html(boundaries_html, height=600)
+
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
     if i['income'] != "N/A" and i['pop'] != "N/A":
@@ -182,5 +212,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Open Topo | v6.7 – Built in NZ 🇳🇿")
-
+st.caption("Free open data: LINZ + Open Topo | v8.3 – Built in NZ 🇳🇿")
