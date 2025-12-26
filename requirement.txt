@@ -1,7 +1,5 @@
 streamlit
 requests
-folium==0.17.0
-streamlit-folium==0.23.0
 pandas
 geopandas
 shapely
