@@ -1,21 +1,17 @@
 import streamlit as st
 import requests
 import os
-import geopandas as gpd
 import pandas as pd
 
 # Use Streamlit secrets for keys
 LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
 GOOGLE_PLACES_KEY = st.secrets["GOOGLE_PLACES_KEY"]
 
-# Load SA2 boundaries
-sa2_gdf = gpd.read_file('data/statsnz-statistical-area-2-2023-generalised-SHP/statistical-area-2-2023-generalised.shp')
-
-# Load real data CSVs
+# Load real data CSVs (small, no big SHP)
 pop_df = pd.read_csv('data/2023_Census_population_change_by_SA2_5545354433051253430.csv')
 income_df = pd.read_csv('data/2023_Census_totals_by_topic_for_households_by_SA2_-132143055565075773.csv')
 
-# Normalize CSV main suburb name (column 4 is ASCII name)
+# Normalize main suburb name (column 4 is ASCII name)
 pop_df['main_suburb'] = pop_df.iloc[:,3].astype(str).str.strip()
 income_df['main_suburb'] = income_df.iloc[:,3].astype(str).str.strip()
 
@@ -29,7 +25,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. sky tower")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. sky tower or plimmerton school")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -62,23 +58,13 @@ if st.button("🔍 Analyse Property", type="primary"):
         address_parts = full_address.split(',')
         main_suburb = "Unknown"
         if len(address_parts) > 1:
-            potential = address_parts[1].strip().title()
-            main_suburb = potential
+            main_suburb = address_parts[1].strip().title()
 
-        # SA2 join for precise sub-area name
-        point = gpd.points_from_xy([lon], [lat])[0]
-        point_gdf = gpd.GeoDataFrame(geometry=[point], crs="EPSG:4326")
-        point_gdf = point_gdf.to_crs(sa2_gdf.crs)
-        joined = gpd.sjoin(point_gdf, sa2_gdf, how="left", predicate="within")
-
-        suburb = main_suburb
-        if not joined.empty:
-            if 'SA2_NAME_ASCII' in joined.columns:
-                suburb_raw = joined.iloc[0]['SA2_NAME_ASCII']
-                suburb = str(suburb_raw).strip() if pd.notna(suburb_raw) else suburb
-            elif 'SA2_NAME' in joined.columns:
-                suburb_raw = joined.iloc[0]['SA2_NAME']
-                suburb = str(suburb_raw).strip() if pd.notna(suburb_raw) else suburb
+        # Fallback to input if formatted address doesn't have suburb
+        if main_suburb == "Unknown":
+            input_parts = address.split(',')
+            if len(input_parts) > 1:
+                main_suburb = input_parts[1].strip().title()
 
         # Demographics from main suburb
         income = "N/A"
@@ -132,8 +118,7 @@ if st.button("🔍 Analyse Property", type="primary"):
         # Save
         st.session_state.insights = {
             "short_address": short_address,
-            "suburb": suburb,
-            "main_suburb": main_suburb,
+            "suburb": main_suburb,
             "elevation": elevation,
             "risk": risk,
             "risk_color": risk_color,
@@ -143,7 +128,7 @@ if st.button("🔍 Analyse Property", type="primary"):
             "growth": growth
         }
 
-        # Map data for st.map
+        # Map data
         st.session_state.map_data = pd.DataFrame({
             "lat": [lat],
             "lon": [lon]
@@ -167,7 +152,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     pop_display = f"{i['pop']:,} ({i['growth']}% growth)" if i['pop'] != "N/A" else "N/A"
     st.metric("Population (2023)", pop_display)
 
-    st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
+    st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} area")
 
     st.markdown("### 🗺️ Map & Aerial View")
     st.map(st.session_state.map_data, zoom=16)
@@ -175,7 +160,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
     if i['income'] != "N/A" and i['pop'] != "N/A":
-        st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
+        st.write(f"Suburb {i['suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
         st.write("Strong for risk-aware investment in growing areas.")
 
     st.warning("Disclaimer: Public data – check official LIM/survey for accuracy.")
@@ -183,4 +168,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Stats NZ + Open Topo | v5.2 – Built in NZ 🇳🇿")
+st.caption("Free open data: LINZ + Open Topo | v6.1 – Built in NZ 🇳🇿")
