@@ -5,3 +5,7 @@ streamlit-folium
 python-dotenv
 geopandas
 pandas
+shapely
+fiona
+pyproj
+rtree
