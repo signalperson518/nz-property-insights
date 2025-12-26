@@ -1,7 +1,5 @@
 import streamlit as st
 import requests
-import folium
-from streamlit_folium import st_folium
 import os
 from dotenv import load_dotenv
 import geopandas as gpd
@@ -26,18 +24,18 @@ income_df['main_suburb'] = income_df.iloc[:,3].astype(str).str.strip()
 
 # Session state
 if "map_data" not in st.session_state:
-    st.session_state.map_data = None
+    st.session_state.map_data = pd.DataFrame()
 if "insights" not in st.session_state:
     st.session_state.insights = None
 
 st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
-st.markdown("**Free tool** – Aerial + elevation + risk + suburb demographics (2023 Census)")
+st.markdown("**Free tool** – Aerial + elevation + **flood/coastal risk** + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. sky tower or north city shopping centre")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. sky tower")
 
 if st.button("🔍 Analyse Property", type="primary"):
-    st.session_state.map_data = None
+    st.session_state.map_data = pd.DataFrame()
     st.session_state.insights = None
 
     if not GOOGLE_PLACES_KEY:
@@ -80,7 +78,7 @@ if st.button("🔍 Analyse Property", type="primary"):
         point_gdf = point_gdf.to_crs(sa2_gdf.crs)
         joined = gpd.sjoin(point_gdf, sa2_gdf, how="left", predicate="within")
 
-        suburb = main_suburb  # Default to main
+        suburb = main_suburb
         if not joined.empty:
             if 'SA2_NAME_ASCII' in joined.columns:
                 suburb_raw = joined.iloc[0]['SA2_NAME_ASCII']
@@ -119,7 +117,7 @@ if st.button("🔍 Analyse Property", type="primary"):
         elev_data = elev_response.json()
         elevation = round(elev_data["results"][0]["elevation"], 1) if elev_data["status"] == "OK" else "N/A"
 
-        # Risk
+        # Flood/Coastal Risk
         if isinstance(elevation, float):
             if elevation > 30:
                 risk = "Low"
@@ -152,25 +150,14 @@ if st.button("🔍 Analyse Property", type="primary"):
             "growth": growth
         }
 
-        # Map
-        m = folium.Map(location=[lat, lon], zoom_start=19)
-        folium.Marker([lat, lon], popup=full_address, tooltip="Location").add_to(m)
-
-        aerial_url = f"https://basemaps.linz.govt.nz/v1/tiles/aerial/EPSG:3857/{{z}}/{{x}}/{{y}}.webp?api={LINZ_API_KEY}"
-        folium.TileLayer(
-            tiles=aerial_url,
-            attr="LINZ Aerial",
-            name="High-Res Aerial",
-            overlay=True,
-            control=True,
-            opacity=0.9
-        ).add_to(m)
-
-        folium.LayerControl().add_to(m)
-        st.session_state.map_data = m
+        # Map data
+        st.session_state.map_data = pd.DataFrame({
+            "lat": [lat],
+            "lon": [lon]
+        })
 
 # Display
-if st.session_state.map_data and st.session_state.insights:
+if not st.session_state.map_data.empty and st.session_state.insights:
     i = st.session_state.insights
 
     st.success(f"**Found:** {i['short_address']} ({i['suburb']})")
@@ -179,7 +166,7 @@ if st.session_state.map_data and st.session_state.insights:
     with cols[0]:
         st.metric("Elevation (m)", i["elevation"])
     with cols[1]:
-        st.markdown(f"**Risk**: <span style='color:{i['risk_color']}'>{i['risk']}</span>", unsafe_allow_html=True)
+        st.markdown(f"**Flood/Coastal Risk**: <span style='color:{i['risk_color']}'>{i['risk']}</span>", unsafe_allow_html=True)
     with cols[2]:
         income_display = f"${i['income']:,}" if i['income'] != "N/A" else "N/A"
         st.metric("Median Income", income_display)
@@ -190,22 +177,17 @@ if st.session_state.map_data and st.session_state.insights:
     st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
 
     st.markdown("### 🗺️ Map & Aerial View")
-    st_folium(st.session_state.map_data, width=900, height=600)
+    st.map(st.session_state.map_data, zoom=16)
 
-    st.markdown("### 🤖 AI Insights Summary")
-    st.write(f"This property on **{i['short_address']}** in **{i['suburb']}** sits at **{i['elevation']}m above sea level** – **{i['risk']} flood/coastal risk**.")
+    st.markdown("### 🤖 AI Summary")
+    st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
     if i['income'] != "N/A" and i['pop'] != "N/A":
-        st.write(f"The broader **{i['main_suburb']}** area has **{i['pop']:,} residents** with strong **{i['growth']}% growth** and a high median household income of **${i['income']:,}**.")
-        st.write("**Investment outlook**: Excellent for risk-aware buyers – elevated position in a fast-growing, affluent suburb.")
-    else:
-        st.write("**Investment outlook**: Elevated position with low risk – ideal in today's climate-conscious market.")
-    st.write("Toggle the aerial layer for stunning recent LINZ photos.")
+        st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
+        st.write("Strong for risk-aware investment in growing areas.")
 
     st.warning("Disclaimer: Public data – check official LIM/survey for accuracy.")
 
 else:
-    st.info("Enter any NZ address or place (e.g. 'sky tower') and click Analyse – results stay!")
-
+    st.info("Enter any NZ address or place and click Analyse – results stay!")
 
 st.caption("Free open data: LINZ + Stats NZ + Open Topo | v5.1 – Built in NZ 🇳🇿")
-
