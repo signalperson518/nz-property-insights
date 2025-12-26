@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# Keys from Streamlit Cloud secrets
+# Use Streamlit secrets for keys
 LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
 GOOGLE_PLACES_KEY = st.secrets["GOOGLE_PLACES_KEY"]
 
@@ -24,7 +24,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. skytower or 39 Lanyon Place, Whitby")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. aotea college or 39 Lanyon Place, Whitby")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -53,11 +53,16 @@ if st.button("🔍 Analyse Property", type="primary"):
         lat = candidate["geometry"]["location"]["lat"]
         lon = candidate["geometry"]["location"]["lng"]
 
-        # Extract main suburb from formatted address
+        # Extract main suburb from formatted address (second part)
         address_parts = full_address.split(',')
         main_suburb = "Unknown"
-        if len(address_parts) > 1:
+        if len(address_parts) > 2:  # Usually street, suburb, city
             main_suburb = address_parts[1].strip().title()
+        elif len(address_parts) > 1:
+            main_suburb = address_parts[1].strip().title()
+
+        # Suburb display from formatted address
+        suburb = main_suburb
 
         # Demographics from main suburb
         income = "N/A"
@@ -111,7 +116,8 @@ if st.button("🔍 Analyse Property", type="primary"):
         # Save
         st.session_state.insights = {
             "short_address": short_address,
-            "suburb": main_suburb,
+            "suburb": suburb,
+            "main_suburb": main_suburb,
             "elevation": elevation,
             "risk": risk,
             "risk_color": risk_color,
@@ -161,4 +167,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Open Topo | v6.2 – Built in NZ 🇳🇿")
+st.caption("Free open data: LINZ + Open Topo | v6.4 – Built in NZ 🇳🇿")
