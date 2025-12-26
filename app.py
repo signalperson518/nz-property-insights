@@ -1,15 +1,12 @@
 import streamlit as st
 import requests
-import folium
-from streamlit_folium import st_folium
 import os
 import geopandas as gpd
 import pandas as pd
 
-# Use Streamlit secrets (no dotenv on Cloud)
+# Use Streamlit secrets for keys
 LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
 GOOGLE_PLACES_KEY = st.secrets["GOOGLE_PLACES_KEY"]
-YOUR_EMAIL = "zhengwang888518@gmail.com"
 
 # Load SA2 boundaries
 sa2_gdf = gpd.read_file('data/statsnz-statistical-area-2-2023-generalised-SHP/statistical-area-2-2023-generalised.shp')
@@ -146,7 +143,7 @@ if st.button("🔍 Analyse Property", type="primary"):
             "growth": growth
         }
 
-        # Map data
+        # Map data for st.map
         st.session_state.map_data = pd.DataFrame({
             "lat": [lat],
             "lon": [lon]
@@ -173,7 +170,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
 
     st.markdown("### 🗺️ Map & Aerial View")
-    st.map(st.session_state.map_data, zoom=18)
+    st.map(st.session_state.map_data, zoom=16)
 
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
