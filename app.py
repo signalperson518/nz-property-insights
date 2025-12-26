@@ -24,7 +24,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. aotea college")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. upper hutt college or 18 Lanyon Place, Whitby, Porirua")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -56,21 +56,26 @@ if st.button("🔍 Analyse Property", type="primary"):
         # Extract main suburb from formatted address (second part)
         address_parts = full_address.split(',')
         main_suburb = "Unknown"
-        if len(address_parts) > 2:  # Usually street, suburb, city
-            main_suburb = address_parts[1].strip().title()
-        elif len(address_parts) > 1:
+        if len(address_parts) > 1:
             main_suburb = address_parts[1].strip().title()
 
         # Suburb display from formatted address
         suburb = main_suburb
 
-        # Demographics from main suburb
+        # Demographics from main suburb (exact match first, then fallback)
         income = "N/A"
         pop_2023 = "N/A"
         growth = "N/A"
 
         if main_suburb != "Unknown":
+            # Exact match
             pop_match = pop_df[pop_df['main_suburb'] == main_suburb]
+            if pop_match.empty:
+                # Fallback: look for containing name (e.g. "Upper Hutt" for "Trentham (Upper Hutt)")
+                containing = pop_df[pop_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
+                if not containing.empty:
+                    pop_match = containing.iloc[0:1]  # Take first
+
             if not pop_match.empty:
                 pop_cols = [col for col in pop_match.columns if '2023' in col and 'population' in col.lower()]
                 growth_cols = [col for col in pop_match.columns if 'change' in col.lower() or 'growth' in col.lower()]
@@ -82,6 +87,11 @@ if st.button("🔍 Analyse Property", type="primary"):
                     growth = f"{growth_val:+.1f}" if pd.notna(growth_val) else "N/A"
 
             income_match = income_df[income_df['main_suburb'] == main_suburb]
+            if income_match.empty:
+                containing = income_df[income_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
+                if not containing.empty:
+                    income_match = containing.iloc[0:1]
+
             if not income_match.empty:
                 income_cols = [col for col in income_match.columns if 'median' in col.lower() and 'income' in col.lower()]
                 if income_cols:
@@ -151,7 +161,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     pop_display = f"{i['pop']:,} ({i['growth']}% growth)" if i['pop'] != "N/A" else "N/A"
     st.metric("Population (2023)", pop_display)
 
-    st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} area")
+    st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
 
     st.markdown("### 🗺️ Map & Aerial View")
     st.map(st.session_state.map_data, zoom=16)
@@ -159,7 +169,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
     if i['income'] != "N/A" and i['pop'] != "N/A":
-        st.write(f"Suburb {i['suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
+        st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
         st.write("Strong for risk-aware investment in growing areas.")
 
     st.warning("Disclaimer: Public data – check official LIM/survey for accuracy.")
@@ -167,5 +177,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Open Topo | v6.4 – Built in NZ 🇳🇿")
-
+st.caption("Free open data: LINZ + Open Topo | v6.6 – Built in NZ 🇳🇿")
