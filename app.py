@@ -1,18 +1,10 @@
 import streamlit as st
 import requests
-import os
 import pandas as pd
 
-# Try Cloud secrets first, fallback to local .env
-try:
-    LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
-    GOOGLE_PLACES_KEY = st.secrets["GOOGLE_PLACES_KEY"]
-except:
-    # Local – load from .env
-    from dotenv import load_dotenv
-    load_dotenv()
-    LINZ_API_KEY = os.getenv("LINZ_API_KEY")
-    GOOGLE_PLACES_KEY = os.getenv("GOOGLE_PLACES_KEY")
+# Keys from Streamlit Cloud secrets
+LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
+GOOGLE_PLACES_KEY = st.secrets["GOOGLE_PLACES_KEY"]
 
 # Load real data CSVs
 pop_df = pd.read_csv('data/2023_Census_population_change_by_SA2_5545354433051253430.csv')
@@ -32,7 +24,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. sky tower or aotea colleage")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. skytower or 39 Lanyon Place, Whitby")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -156,7 +148,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} area")
 
     st.markdown("### 🗺️ Map & Aerial View")
-    st.map(st.session_state.map_data, zoom=16)
+    st.map(st.session_state.map_data, zoom=18)
 
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
@@ -169,4 +161,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Open Topo | v6.3 – Built in NZ 🇳🇿")
+st.caption("Free open data: LINZ + Open Topo | v6.2 – Built in NZ 🇳🇿")
