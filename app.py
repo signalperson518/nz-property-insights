@@ -23,7 +23,7 @@ if "show_boundaries" not in st.session_state:
 st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. 18 lanyon place, whitby or upper hutt college")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. 39 lanyon place, whitby or upper hutt college")
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
     st.session_state.insights = None
@@ -63,6 +63,11 @@ if st.button("🔍 Analyse Property", type="primary"):
         age_le60 = "N/A"
         age_le65 = "N/A"
         age_65plus = "N/A"
+        european_pct = "N/A"
+        maori_pct = "N/A"
+        pacific_pct = "N/A"
+        asian_pct = "N/A"
+        occupation_profile = {}
         if main_suburb != "Unknown":
             # Matches
             pop_matches = pop_df[pop_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
@@ -87,10 +92,10 @@ if st.button("🔍 Analyse Property", type="primary"):
                 ind_matches = ind_matches.copy()
                 numeric_cols = ind_matches.select_dtypes(include='number').columns
                 ind_matches[numeric_cols] = ind_matches[numeric_cols].clip(lower=0).fillna(0)
-                # --- Education: weighted percentages (using only stated categories) ---
-                lower_keys = ['no qualification', 'level 1 certificate', 'level 2 certificate', 'level 3 certificate', 'level 4 certificate', 'level 5 diploma', 'level 6 diploma', 'overseas secondary school qualification']
+                # --- Education ---
+                lower_keys = ['no qualification', 'level 1', 'level 2', 'level 3', 'level 4', 'level 5', 'level 6', 'overseas secondary']
                 lower_cols = [col for col in ind_matches.columns if any(k in col.lower() for k in lower_keys) and '2023' in col]
-                higher_keys = ['bachelor degree and level 7 qualification', 'post-graduate and honours degrees', 'masters degree', 'doctorate degree']
+                higher_keys = ['bachelor', 'post-graduate', 'honours', 'masters', 'doctorate']
                 higher_cols = [col for col in ind_matches.columns if any(k in col.lower() for k in higher_keys) and '2023' in col]
                 if lower_cols and higher_cols:
                     lower_total = ind_matches[lower_cols].sum().sum()
@@ -99,39 +104,76 @@ if st.button("🔍 Analyse Property", type="primary"):
                     if total_stated > 0:
                         lower_bachelor = f"{(lower_total / total_stated * 100):.1f}%"
                         bachelor_higher = f"{(higher_total / total_stated * 100):.1f}%"
-                # --- Age groups: weighted cumulative using summed bins as total ---
+                # --- Age groups ---
                 age_bin_patterns = ['0-4 years', '5-9 years', '10-14 years', '15-19 years', '20-24 years', '25-29 years', '30-34 years', '35-39 years', '40-44 years', '45-49 years', '50-54 years', '55-59 years', '60-64 years', '65-69 years', '70-74 years', '75-79 years', '80-84 years', '85 years and over']
                 age_cols = [col for col in ind_matches.columns if any(p in col.lower() for p in age_bin_patterns) and '2023' in col]
                 if age_cols:
                     total_age = ind_matches[age_cols].sum().sum()
                     if total_age > 0:
                         cum = 0.0
-                        # ≤20: 0-19
                         for p in ['0-4 years', '5-9 years', '10-14 years', '15-19 years']:
                             cols = [col for col in age_cols if p in col.lower()]
                             if cols:
                                 cum += ind_matches[cols].sum().sum()
                         age_le20 = f"{(cum / total_age * 100):.1f}%"
-                        # ≤40: +20-39
                         for p in ['20-24 years', '25-29 years', '30-34 years', '35-39 years']:
                             cols = [col for col in age_cols if p in col.lower()]
                             if cols:
                                 cum += ind_matches[cols].sum().sum()
                         age_le40 = f"{(cum / total_age * 100):.1f}%"
-                        # ≤60: +40-59
                         for p in ['40-44 years', '45-49 years', '50-54 years', '55-59 years']:
                             cols = [col for col in age_cols if p in col.lower()]
                             if cols:
                                 cum += ind_matches[cols].sum().sum()
                         age_le60 = f"{(cum / total_age * 100):.1f}%"
-                        # ≤65: +60-64
                         for p in ['60-64 years']:
                             cols = [col for col in age_cols if p in col.lower()]
                             if cols:
                                 cum += ind_matches[cols].sum().sum()
                         age_le65 = f"{(cum / total_age * 100):.1f}%"
-                        # 65+
                         age_65plus = f"{(100 - (cum / total_age * 100)):.1f}%"
+                # --- Ethnic Diversity ---
+                ethnic_total_cols = [col for col in ind_matches.columns if 'total stated' in col.lower() and 'ethnic' in col.lower() and '2023' in col]
+                if ethnic_total_cols:
+                    ethnic_total = ind_matches[ethnic_total_cols[0]].sum()
+                    if ethnic_total > 0:
+                        # European
+                        european_cols = [col for col in ind_matches.columns if 'european' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
+                        if european_cols:
+                            european_pct = f"{(ind_matches[european_cols].sum().sum() / ethnic_total * 100):.1f}%"
+                        # Māori
+                        maori_cols = [col for col in ind_matches.columns if 'māori' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'descent' not in col.lower() and 'total' not in col.lower()]
+                        if maori_cols:
+                            maori_pct = f"{(ind_matches[maori_cols].sum().sum() / ethnic_total * 100):.1f}%"
+                        # Pacific Peoples
+                        pacific_cols = [col for col in ind_matches.columns if 'pacific peoples' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
+                        if pacific_cols:
+                            pacific_pct = f"{(ind_matches[pacific_cols].sum().sum() / ethnic_total * 100):.1f}%"
+                        # Asian
+                        asian_cols = [col for col in ind_matches.columns if 'asian' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
+                        if asian_cols:
+                            asian_pct = f"{(ind_matches[asian_cols].sum().sum() / ethnic_total * 100):.1f}%"
+                # --- Occupation Profile ---
+                occ_total_cols = [col for col in ind_matches.columns if 'total stated' in col.lower() and 'occupation' in col.lower() and 'usual residence' in col.lower() and '2023' in col]
+                if occ_total_cols:
+                    occ_total = ind_matches[occ_total_cols[0]].sum()
+                    if occ_total > 0:
+                        occ_categories = {
+                            'Managers': 'managers',
+                            'Professionals': 'professionals',
+                            'Technicians and Trades Workers': 'technicians and trades workers',
+                            'Community and Personal Service Workers': 'community and personal service workers',
+                            'Clerical and Administrative Workers': 'clerical and administrative workers',
+                            'Sales Workers': 'sales workers',
+                            'Machinery Operators and Drivers': 'machinery operators and drivers',
+                            'Labourers': 'labourers'
+                        }
+                        occupation_profile = {}
+                        for label, key in occ_categories.items():
+                            occ_cols = [col for col in ind_matches.columns if key in col.lower() and '2023' in col and 'usual residence' in col.lower() and 'total' not in col.lower()]
+                            if occ_cols:
+                                occ_sum = ind_matches[occ_cols].sum().sum()
+                                occupation_profile[label] = f"{(occ_sum / occ_total * 100):.1f}%"
         # Elevation
         elev_url = f"https://api.opentopodata.org/v1/nzdem8m?locations={lat},{lon}"
         elev_response = requests.get(elev_url)
@@ -164,7 +206,7 @@ if st.button("🔍 Analyse Property", type="primary"):
             elif elevation > 10: resilience_score += 30
             elif elevation > 5: resilience_score += 15
         if growth != "N/A":
-            growth_float = float(growth)
+            growth_float = float(growth.replace('+', '')) if isinstance(growth, str) else 0
             resilience_score += min(max(growth_float, 0) * 2, 20)
         if income != "N/A":
             resilience_score += min((income / 200000) * 20, 20)
@@ -200,6 +242,11 @@ if st.button("🔍 Analyse Property", type="primary"):
             "age_le60": age_le60,
             "age_le65": age_le65,
             "age_65plus": age_65plus,
+            "european_pct": european_pct,
+            "maori_pct": maori_pct,
+            "pacific_pct": pacific_pct,
+            "asian_pct": asian_pct,
+            "occupation_profile": occupation_profile,
             "lat": lat,
             "lon": lon
         }
@@ -225,35 +272,140 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.metric("Population (2023)", pop_display)
     st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
     st.markdown("### Suburb Profile")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("% Lower than Bachelor's degree", i["lower_bachelor"])
-        st.metric("% Bachelor's degree or higher", i["bachelor_higher"])
-    with col2:
-        st.metric("% ≤20 years old", i["age_le20"])
-        st.metric("% ≤40 years old", i["age_le40"])
-        st.metric("% ≤60 years old", i["age_le60"])
-        st.metric("% ≤65 years old", i["age_le65"])
-        st.metric("% 65+ years old", i["age_65plus"])
-    with st.expander("ℹ️ How age groups work"):
-        st.write("""
-        These age percentages are **cumulative** (they build on each other):
-        - **≤20 years old**: % of residents aged 0–20
-        - **≤40 years old**: % of residents aged 0–40 (includes everyone ≤20 + 21–40)
-        - **≤60 years old**: % of residents aged 0–60 (includes everyone ≤40 + 41–60)
-        - **≤65 years old**: % of residents aged 0–65 (includes everyone ≤60 + 61–65)
-        - **65+ years old**: everyone 65 and older
+    tab_edu, tab_age, tab_ethnic, tab_occ = st.tabs(["📚 Education", "👥 Age", "🌍 Ethnic Diversity", "💼 Occupation"])
+    with tab_edu:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Lower than Bachelor's degree", i["lower_bachelor"])
+        with col2:
+            st.metric("Bachelor's degree or higher", i["bachelor_higher"])
+    with tab_age:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("≤20 years old", i["age_le20"])
+            st.metric("≤40 years old", i["age_le40"])
+            st.metric("≤60 years old", i["age_le60"])
+        with col2:
+            st.metric("≤65 years old", i["age_le65"])
+            st.metric("65+ years old", i["age_65plus"])
+        with st.expander("ℹ️ How age groups work"):
+            st.write("""
+            These age percentages are **cumulative** (they build on each other):
+            - **≤20 years old**: % of residents aged 0–20
+            - **≤40 years old**: % of residents aged 0–40 (includes everyone ≤20 + 21–40)
+            - **≤60 years old**: % of residents aged 0–60 (includes everyone ≤40 + 41–60)
+            - **≤65 years old**: % of residents aged 0–65 (includes everyone ≤60 + 61–65)
+            - **65+ years old**: everyone 65 and older
 
-        That's why the numbers increase as you go down – they are not separate buckets.
-        
-        The only math check you need: **≤65% + 65+% = 100%** ✅
-        
-        Example for a family suburb like Whitby:
-        - Lots of kids → high ≤20%
-        - Many young parents → big jump to ≤40%
-        - Fewer retirees → low 65+%
-        """)
-    # Map with boundaries
+            That's why the numbers increase as you go down – they are not separate buckets.
+            
+            The only math check you need: **≤65% + 65+% = 100%** ✅
+            
+            Example for a family suburb like Whitby:
+            - Lots of kids → high ≤20%
+            - Many young parents → big jump to ≤40%
+            - Fewer retirees → low 65+%
+            """)
+    with tab_ethnic:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("% European", i.get("european_pct", "N/A"))
+            st.metric("% Māori", i.get("maori_pct", "N/A"))
+        with col2:
+            st.metric("% Pacific Peoples", i.get("pacific_pct", "N/A"))
+            st.metric("% Asian", i.get("asian_pct", "N/A"))
+        st.caption("Note: Ethnic percentages may exceed 100% because people can identify with multiple ethnicities in the NZ Census.")
+    with tab_occ:
+        if i.get("occupation_profile", {}):
+            occ_items = list(i["occupation_profile"].items())
+            cols = st.columns(2)
+            for idx, (label, pct) in enumerate(occ_items):
+                with cols[idx % 2]:
+                    st.metric(label, pct)
+        else:
+            st.write("N/A")
+    # AI Summary – now BEFORE the map
+    st.markdown("### 🤖 AI Summary")
+    st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
+    st.write(f"**Resilience Score**: {i['resilience_score']}/100 | **Climate Resilience**: {i['resilience']}")
+    if i['income'] != "N/A" and i['pop'] != "N/A":
+        st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
+    with st.expander("🤓 AI Insights & Interpretation", expanded=True):
+        insights = []
+        if i['bachelor_higher'] != "N/A":
+            higher_pct = float(i['bachelor_higher'].replace('%', ''))
+            if higher_pct >= 40:
+                insights.append("🎓 **Highly educated** population – strong presence of professionals and knowledge workers.")
+            elif higher_pct >= 30:
+                insights.append("🎓 Well-educated community with a good share of degree holders.")
+            elif higher_pct >= 20:
+                insights.append("🎓 Solid education levels, typical of established suburbs.")
+            else:
+                insights.append("🎓 Education levels below average – may indicate more trade or practical skill-based workforce.")
+        if i['age_le20'] != "N/A" and i['age_65plus'] != "N/A":
+            young_pct = float(i['age_le20'].replace('%', ''))
+            elderly_pct = float(i['age_65plus'].replace('%', ''))
+            if young_pct >= 40:
+                insights.append("👨‍👩‍👧‍👦 **Family-oriented** suburb with a high proportion of children and young families.")
+            elif young_pct >= 30:
+                insights.append("👨‍👩‍👧‍👦 Above-average number of children – good for schools and family amenities.")
+            if elderly_pct <= 10:
+                insights.append("👴 Relatively **young population** – low proportion of retirees.")
+            elif elderly_pct >= 20:
+                insights.append("👴 **Mature community** with higher share of retirees – may suit downsizers.")
+        ethnic_note = ""
+        if i.get("european_pct", "N/A") != "N/A":
+            eur = float(i["european_pct"].replace('%', ''))
+            if eur >= 80:
+                ethnic_note = "Predominantly European with limited ethnic diversity."
+            elif eur >= 70:
+                ethnic_note = "Mainly European with some growing diversity."
+            else:
+                ethnic_note = "Culturally diverse community."
+            if i.get("maori_pct", "N/A") != "N/A" and float(i["maori_pct"].replace('%', '')) >= 15:
+                ethnic_note += " Significant Māori presence."
+            if i.get("asian_pct", "N/A") != "N/A" and float(i["asian_pct"].replace('%', '')) >= 15:
+                ethnic_note += " Strong Asian community."
+            if i.get("pacific_pct", "N/A") != "N/A" and float(i["pacific_pct"].replace('%', '')) >= 10:
+                ethnic_note += " Notable Pacific Peoples population."
+            insights.append(f"🌍 {ethnic_note}")
+        if i.get("occupation_profile", {}):
+            prof_pct = float(i["occupation_profile"].get("Professionals", "0%").replace('%', ''))
+            mgr_pct = float(i["occupation_profile"].get("Managers", "0%").replace('%', ''))
+            trades_pct = float(i["occupation_profile"].get("Technicians and Trades Workers", "0%").replace('%', ''))
+            if prof_pct + mgr_pct >= 50:
+                insights.append("💼 **Professional hub** – high concentration of managers and specialists.")
+            elif prof_pct + mgr_pct >= 40:
+                insights.append("💼 Strong professional and managerial workforce.")
+            elif trades_pct >= 20:
+                insights.append("🔧 Skilled trades and practical occupations dominate.")
+        if i['income'] != "N/A" and i['growth'] != "N/A":
+            income_val = i['income']
+            growth_val = float(i['growth'].replace('+', '')) if isinstance(i['growth'], str) else 0
+            if income_val >= 100000 and growth_val > 5:
+                insights.append("💰 **High-growth affluent area** – attractive for long-term investment and lifestyle.")
+            elif income_val >= 90000:
+                insights.append("💰 **Affluent suburb** with strong earning power.")
+            elif income_val <= 60000:
+                insights.append("💰 More **affordable** area – good entry point for first-home buyers or investors.")
+            if growth_val > 10:
+                insights.append("📈 **Rapidly growing** – increasing demand likely to support property values.")
+            elif growth_val > 3:
+                insights.append("📈 Positive population growth – stable and expanding community.")
+            elif growth_val < 0:
+                insights.append("📉 Declining population – may reflect changing demographics or outflow.")
+        higher_pct = float(i['bachelor_higher'].replace('%', '')) if i['bachelor_higher'] != "N/A" else 0
+        elderly_pct = float(i['age_65plus'].replace('%', '')) if i['age_65plus'] != "N/A" else 100
+        prof_mgr_pct = float(i["occupation_profile"].get("Professionals", "0%").replace('%', '')) + float(i["occupation_profile"].get("Managers", "0%").replace('%', '')) if i.get("occupation_profile") else 0
+        if i['resilience_score'] >= 70 and higher_pct >= 30 and prof_mgr_pct >= 40 and elderly_pct <= 15:
+            insights.append("✅ **Premium family & professional suburb** – excellent long-term prospect.")
+        elif i['resilience_score'] >= 50:
+            insights.append("✅ **Solid, balanced community** – great mix of safety, growth, and lifestyle.")
+        else:
+            insights.append("⚖️ **Moderate resilience** – good affordability with some trade-offs.")
+        for insight in insights:
+            st.write(insight)
+    # Map with boundaries (now AFTER AI Summary)
     boundaries_url = f"https://tiles.linz.govt.nz/services;key={LINZ_API_KEY}/tiles/v4/layer=50767/EPSG:3857/{{z}}/{{x}}/{{y}}.png"
     boundaries_html = f"""
     <div id="boundaries-map" style="width:100%; height:600px;"></div>
@@ -267,79 +419,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     </script>
     """
     st.components.v1.html(boundaries_html, height=600)
-    st.markdown("### 🤖 AI Summary")
-    st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
-    st.write(f"**Resilience Score**: {i['resilience_score']}/100 | **Climate Resilience**: {i['resilience']}")
-
-    if i['income'] != "N/A" and i['pop'] != "N/A":
-        st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
-
-    # === Smart AI Interpretation ===
-    with st.expander("🤓 AI Insights & Interpretation", expanded=True):
-        insights = []
-
-        # Education insight
-        if i['bachelor_higher'] != "N/A":
-            higher_pct = float(i['bachelor_higher'].replace('%', ''))
-            if higher_pct >= 40:
-                insights.append("🎓 **Highly educated** population – strong presence of professionals and knowledge workers.")
-            elif higher_pct >= 30:
-                insights.append("🎓 Well-educated community with a good share of degree holders.")
-            elif higher_pct >= 20:
-                insights.append("🎓 Solid education levels, typical of established suburbs.")
-            else:
-                insights.append("🎓 Education levels below average – may indicate more trade or practical skill-based workforce.")
-
-        # Age / Family structure
-        if i['age_le20'] != "N/A" and i['age_65plus'] != "N/A":
-            young_pct = float(i['age_le20'].replace('%', ''))
-            elderly_pct = float(i['age_65plus'].replace('%', ''))
-
-            if young_pct >= 40:
-                insights.append("👨‍👩‍👧‍👦 **Family-oriented** suburb with a high proportion of children and young families.")
-            elif young_pct >= 30:
-                insights.append("👨‍👩‍👧‍👦 Above-average number of children – good for schools and family amenities.")
-
-            if elderly_pct <= 10:
-                insights.append("👴 Relatively **young population** – low proportion of retirees.")
-            elif elderly_pct >= 20:
-                insights.append("👴 **Mature community** with higher share of retirees – may suit downsizers.")
-
-        # Income + Growth combo
-        if i['income'] != "N/A" and i['growth'] != "N/A":
-            income_val = i['income']
-            growth_val = float(i['growth']) if '+' in i['growth'] or '-' in i['growth'] else 0
-
-            if income_val >= 100000 and growth_val > 5:
-                insights.append("💰 **High-growth affluent area** – attractive for long-term investment and lifestyle.")
-            elif income_val >= 90000:
-                insights.append("💰 **Affluent suburb** with strong earning power.")
-            elif income_val <= 60000:
-                insights.append("💰 More **affordable** area – good entry point for first-home buyers or investors.")
-
-            if growth_val > 10:
-                insights.append("📈 **Rapidly growing** – increasing demand likely to support property values.")
-            elif growth_val > 3:
-                insights.append("📈 Positive population growth – stable and expanding community.")
-            elif growth_val < 0:
-                insights.append("📉 Declining population – may reflect changing demographics or outflow.")
-
-        # Final recommendation vibe
-        higher_pct = float(i['bachelor_higher'].replace('%', '')) if i['bachelor_higher'] != "N/A" else 0
-        elderly_pct = float(i['age_65plus'].replace('%', '')) if i['age_65plus'] != "N/A" else 100
-        if i['resilience_score'] >= 70 and higher_pct >= 30 and elderly_pct <= 15:
-            insights.append("✅ **Excellent long-term prospect** for families and professionals seeking growth and resilience.")
-        elif i['resilience_score'] >= 50:
-            insights.append("✅ **Solid, balanced suburb** – good mix of safety, growth, and community.")
-        else:
-            insights.append("⚖️ **Moderate resilience** – consider trade-offs between risk, affordability, and growth.")
-
-        # Output insights
-        for insight in insights:
-            st.write(insight)
-
     st.warning("Disclaimer: Public data – check official LIM/survey for accuracy.")
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 st.caption("Free open data: LINZ + Open Topo | Built in NZ 🇳🇿")
-
