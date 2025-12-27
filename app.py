@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
-import difflib  # For fuzzy match
+import difflib
 
 # Use Streamlit secrets for keys
 LINZ_API_KEY = st.secrets["LINZ_API_KEY"]
@@ -27,7 +27,7 @@ st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
 
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. 18 lanyon place, whitby or upper hutt college")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. 23 queen street, petone or upper hutt college")
 
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
@@ -65,45 +65,32 @@ if st.button("🔍 Analyse Property", type="primary"):
         # Suburb display from formatted address
         suburb = main_suburb
 
-        # Demographics from main suburb (exact first, then fuzzy)
+        # Demographics – group all SA2s containing main_suburb
         income = "N/A"
         pop_2023 = "N/A"
         growth = "N/A"
 
         if main_suburb != "Unknown":
-            # Exact match
-            pop_match = pop_df[pop_df['main_suburb'] == main_suburb]
-            if pop_match.empty:
-                # Fuzzy match
-                all_subs = pop_df['main_suburb'].tolist()
-                fuzzy_match = difflib.get_close_matches(main_suburb, all_subs, n=1, cutoff=0.6)
-                if fuzzy_match:
-                    main_suburb = fuzzy_match[0]
-                    pop_match = pop_df[pop_df['main_suburb'] == main_suburb]
+            # Find all SA2s containing the main suburb
+            pop_matches = pop_df[pop_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
+            income_matches = income_df[income_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
 
-            if not pop_match.empty:
-                pop_cols = [col for col in pop_match.columns if '2023' in col and 'population' in col.lower()]
-                growth_cols = [col for col in pop_match.columns if 'change' in col.lower() or 'growth' in col.lower()]
+            if not pop_matches.empty:
+                pop_cols = [col for col in pop_matches.columns if '2023' in col and 'population' in col.lower()]
                 if pop_cols:
-                    pop_val = pop_match[pop_cols[0]].iloc[0]
-                    pop_2023 = int(pop_val) if pd.notna(pop_val) else "N/A"
+                    pop_total = pop_matches[pop_cols[0]].sum()
+                    pop_2023 = int(pop_total) if pd.notna(pop_total) else "N/A"
+
+                growth_cols = [col for col in pop_matches.columns if 'change' in col.lower() or 'growth' in col.lower()]
                 if growth_cols:
-                    growth_val = pop_match[growth_cols[0]].iloc[0]
-                    growth = f"{growth_val:+.1f}" if pd.notna(growth_val) else "N/A"
+                    growth_avg = pop_matches[growth_cols[0]].mean()
+                    growth = f"{growth_avg:+.1f}" if pd.notna(growth_avg) else "N/A"
 
-            income_match = income_df[income_df['main_suburb'] == main_suburb]
-            if income_match.empty:
-                all_subs = income_df['main_suburb'].tolist()
-                fuzzy_match = difflib.get_close_matches(main_suburb, all_subs, n=1, cutoff=0.6)
-                if fuzzy_match:
-                    main_suburb = fuzzy_match[0]
-                    income_match = income_df[income_df['main_suburb'] == main_suburb]
-
-            if not income_match.empty:
-                income_cols = [col for col in income_match.columns if 'median' in col.lower() and 'income' in col.lower()]
+            if not income_matches.empty:
+                income_cols = [col for col in income_matches.columns if 'median' in col.lower() and 'income' in col.lower()]
                 if income_cols:
-                    income_val = income_match[income_cols[0]].iloc[0]
-                    income = int(income_val) if pd.notna(income_val) else "N/A"
+                    income_avg = income_matches[income_cols[0]].mean()
+                    income = int(income_avg) if pd.notna(income_avg) else "N/A"
 
         # Elevation – safe handling
         elev_url = f"https://api.opentopodata.org/v1/nzdem8m?locations={lat},{lon}"
@@ -131,6 +118,41 @@ if st.button("🔍 Analyse Property", type="primary"):
             risk_color = "gray"
             risk_desc = "Elevation data unavailable"
 
+        # Resilience Score (0-100) – higher = lower flood risk + higher resilience
+        resilience_score = 0
+        if isinstance(elevation, float):
+            # Elevation dominant – max 60 points
+            if elevation > 50:
+                resilience_score += 60
+            elif elevation > 30:
+                resilience_score += 50
+            elif elevation > 10:
+                resilience_score += 30
+            elif elevation > 5:
+                resilience_score += 15
+            else:
+                resilience_score += 0
+        if growth != "N/A":
+            growth_float = float(growth)
+            # Growth bonus – max 20 points
+            resilience_score += min(max(growth_float, 0) * 2, 20)
+        if income != "N/A":
+            # Income bonus – max 20 points
+            resilience_score += min((income / 200000) * 20, 20)
+        resilience_score = min(max(int(resilience_score), 0), 100)
+
+        # Climate Resilience Rating (1-5 stars)
+        if resilience_score >= 80:
+            resilience = "★★★★★ Excellent"
+        elif resilience_score >= 60:
+            resilience = "★★★★ Very Good"
+        elif resilience_score >= 40:
+            resilience = "★★★ Good"
+        elif resilience_score >= 20:
+            resilience = "★★ Fair"
+        else:
+            resilience = "★ Poor"
+
         # Save
         st.session_state.insights = {
             "short_address": short_address,
@@ -143,6 +165,8 @@ if st.button("🔍 Analyse Property", type="primary"):
             "income": income,
             "pop": pop_2023,
             "growth": growth,
+            "resilience_score": resilience_score,
+            "resilience": resilience,
             "lat": lat,
             "lon": lon
         }
@@ -159,6 +183,29 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 
     st.success(f"**Found:** {i['short_address']} ({i['suburb']})")
 
+    # Resilience Score with explanation
+    st.markdown(f"### Resilience Score: **{i['resilience_score']}/100**")
+    st.progress(i['resilience_score'] / 100)
+    with st.expander("How is Resilience Score calculated?"):
+        st.write("""
+        Higher score = lower flood risk + higher suburb resilience.
+        - Elevation: up to 60 points (higher elevation = safer from flood)
+        - Population growth: up to 20 points (positive growth = bonus)
+        - Median income: up to 20 points (affluent areas = bonus resilience)
+        """)
+
+    # Climate Resilience Rating with explanation
+    st.markdown(f"### Climate Resilience Rating: {i['resilience']}")
+    with st.expander("How is Climate Resilience calculated?"):
+        st.write("""
+        1-5 stars based on Resilience Score:
+        - ★★★★★ Excellent (80+): Very resilient to climate risks
+        - ★★★★ Very Good (60-79)
+        - ★★★ Good (40-59)
+        - ★★ Fair (20-39)
+        - ★ Poor (0-19)
+        """)
+
     cols = st.columns(3)
     with cols[0]:
         st.metric("Elevation (m)", i["elevation"])
@@ -174,9 +221,9 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
 
     st.markdown("### 🗺️ Map & Aerial View")
-    st.map(st.session_state.map_data, zoom=17)
+    st.map(st.session_state.map_data, zoom=18)
 
-    # Checkbox for property boundaries
+    # Property boundaries checkbox
     st.session_state.show_boundaries = st.checkbox("Show property boundaries", value=st.session_state.show_boundaries)
 
     if st.session_state.show_boundaries:
@@ -203,6 +250,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
+    st.write(f"**Resilience Score**: {i['resilience_score']}/100 | **Climate Resilience**: {i['resilience']}")
     if i['income'] != "N/A" and i['pop'] != "N/A":
         st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
         st.write("Strong for risk-aware investment in growing areas.")
@@ -212,4 +260,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 
-st.caption("Free open data: LINZ + Open Topo | v8.3 – Built in NZ 🇳🇿")
+st.caption("Free open data: LINZ + Open Topo | v9.5 – Built in NZ 🇳🇿")
