@@ -23,7 +23,7 @@ if "show_boundaries" not in st.session_state:
 st.set_page_config(page_title="NZ Property Insights AI", layout="wide")
 st.title("🏠 NZ Property Insights AI")
 st.markdown("**Free tool** – Aerial + elevation + flood/coastal risk + suburb demographics (2023 Census)")
-address = st.text_input("Enter NZ address or place:", placeholder="e.g. 39 lanyon place, whitby or upper hutt college")
+address = st.text_input("Enter NZ address or place:", placeholder="e.g. 18 lanyon place, whitby or upper hutt college")
 if st.button("🔍 Analyse Property", type="primary"):
     st.session_state.map_data = pd.DataFrame()
     st.session_state.insights = None
@@ -423,3 +423,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
 st.caption("Free open data: LINZ + Open Topo | Built in NZ 🇳🇿")
+
