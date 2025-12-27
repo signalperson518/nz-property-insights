@@ -270,8 +270,74 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.markdown("### 🤖 AI Summary")
     st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
     st.write(f"**Resilience Score**: {i['resilience_score']}/100 | **Climate Resilience**: {i['resilience']}")
+
     if i['income'] != "N/A" and i['pop'] != "N/A":
         st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
+
+    # === Smart AI Interpretation ===
+    with st.expander("🤓 AI Insights & Interpretation", expanded=True):
+        insights = []
+
+        # Education insight
+        if i['bachelor_higher'] != "N/A":
+            higher_pct = float(i['bachelor_higher'].replace('%', ''))
+            if higher_pct >= 40:
+                insights.append("🎓 **Highly educated** population – strong presence of professionals and knowledge workers.")
+            elif higher_pct >= 30:
+                insights.append("🎓 Well-educated community with a good share of degree holders.")
+            elif higher_pct >= 20:
+                insights.append("🎓 Solid education levels, typical of established suburbs.")
+            else:
+                insights.append("🎓 Education levels below average – may indicate more trade or practical skill-based workforce.")
+
+        # Age / Family structure
+        if i['age_le20'] != "N/A" and i['age_65plus'] != "N/A":
+            young_pct = float(i['age_le20'].replace('%', ''))
+            elderly_pct = float(i['age_65plus'].replace('%', ''))
+
+            if young_pct >= 40:
+                insights.append("👨‍👩‍👧‍👦 **Family-oriented** suburb with a high proportion of children and young families.")
+            elif young_pct >= 30:
+                insights.append("👨‍👩‍👧‍👦 Above-average number of children – good for schools and family amenities.")
+
+            if elderly_pct <= 10:
+                insights.append("👴 Relatively **young population** – low proportion of retirees.")
+            elif elderly_pct >= 20:
+                insights.append("👴 **Mature community** with higher share of retirees – may suit downsizers.")
+
+        # Income + Growth combo
+        if i['income'] != "N/A" and i['growth'] != "N/A":
+            income_val = i['income']
+            growth_val = float(i['growth']) if '+' in i['growth'] or '-' in i['growth'] else 0
+
+            if income_val >= 100000 and growth_val > 5:
+                insights.append("💰 **High-growth affluent area** – attractive for long-term investment and lifestyle.")
+            elif income_val >= 90000:
+                insights.append("💰 **Affluent suburb** with strong earning power.")
+            elif income_val <= 60000:
+                insights.append("💰 More **affordable** area – good entry point for first-home buyers or investors.")
+
+            if growth_val > 10:
+                insights.append("📈 **Rapidly growing** – increasing demand likely to support property values.")
+            elif growth_val > 3:
+                insights.append("📈 Positive population growth – stable and expanding community.")
+            elif growth_val < 0:
+                insights.append("📉 Declining population – may reflect changing demographics or outflow.")
+
+        # Final recommendation vibe
+        higher_pct = float(i['bachelor_higher'].replace('%', '')) if i['bachelor_higher'] != "N/A" else 0
+        elderly_pct = float(i['age_65plus'].replace('%', '')) if i['age_65plus'] != "N/A" else 100
+        if i['resilience_score'] >= 70 and higher_pct >= 30 and elderly_pct <= 15:
+            insights.append("✅ **Excellent long-term prospect** for families and professionals seeking growth and resilience.")
+        elif i['resilience_score'] >= 50:
+            insights.append("✅ **Solid, balanced suburb** – good mix of safety, growth, and community.")
+        else:
+            insights.append("⚖️ **Moderate resilience** – consider trade-offs between risk, affordability, and growth.")
+
+        # Output insights
+        for insight in insights:
+            st.write(insight)
+
     st.warning("Disclaimer: Public data – check official LIM/survey for accuracy.")
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
