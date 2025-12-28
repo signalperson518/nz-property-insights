@@ -46,12 +46,33 @@ if st.button("🔍 Analyse Property", type="primary"):
         short_address = full_address.split(',')[0]
         lat = candidate["geometry"]["location"]["lat"]
         lon = candidate["geometry"]["location"]["lng"]
-        # Extract main suburb
-        address_parts = full_address.split(',')
+        # --- Robust suburb extraction ---
+        address_parts = [part.strip() for part in full_address.split(',')]
         main_suburb = "Unknown"
-        if len(address_parts) > 1:
-            main_suburb = address_parts[1].strip().title()
-        suburb = main_suburb
+        city_postcode = "Unknown"
+        
+        # Find the part before the one containing digits (postcode) – that's usually the suburb
+        for i, part in enumerate(address_parts):
+            if i + 1 < len(address_parts):
+                next_part = address_parts[i + 1]
+                if any(c.isdigit() for c in next_part):  # next part has postcode
+                    main_suburb = part.title()
+                    city_postcode = next_part.title()
+                    break
+        # Fallback: if no postcode found, use second part (common for schools/landmarks)
+        if main_suburb == "Unknown" and len(address_parts) > 1:
+            main_suburb = address_parts[1].title()
+            if len(address_parts) > 2:
+                city_postcode = address_parts[2].title()
+        
+        # Final cleanup: remove any trailing digits/postcode from suburb name
+        main_suburb = ' '.join([word for word in main_suburb.split() if not word.isdigit() and not word.startswith('5')])
+        
+        # For display: use city/postcode if available
+        display_context = city_postcode if city_postcode != "Unknown" else ""
+        suburb_display = f"{main_suburb} ({display_context})" if display_context != "Unknown" else main_suburb
+        
+        suburb = main_suburb  # This is what we use for data matching
         # Demographics
         income = "N/A"
         pop_2023 = "N/A"
@@ -68,6 +89,10 @@ if st.button("🔍 Analyse Property", type="primary"):
         pacific_pct = "N/A"
         asian_pct = "N/A"
         occupation_profile = {}
+        wages_salary_pct = "N/A"
+        self_employed_pct = "N/A"
+        superannuation_pct = "N/A"
+        benefits_pct = "N/A"
         if main_suburb != "Unknown":
             # Matches
             pop_matches = pop_df[pop_df['main_suburb'].str.contains(main_suburb, case=False, na=False)]
@@ -137,20 +162,16 @@ if st.button("🔍 Analyse Property", type="primary"):
                 if ethnic_total_cols:
                     ethnic_total = ind_matches[ethnic_total_cols[0]].sum()
                     if ethnic_total > 0:
-                        # European
                         european_cols = [col for col in ind_matches.columns if 'european' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
+                        maori_cols = [col for col in ind_matches.columns if 'māori' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'descent' not in col.lower() and 'total' not in col.lower()]
+                        pacific_cols = [col for col in ind_matches.columns if 'pacific peoples' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
+                        asian_cols = [col for col in ind_matches.columns if 'asian' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
                         if european_cols:
                             european_pct = f"{(ind_matches[european_cols].sum().sum() / ethnic_total * 100):.1f}%"
-                        # Māori
-                        maori_cols = [col for col in ind_matches.columns if 'māori' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'descent' not in col.lower() and 'total' not in col.lower()]
                         if maori_cols:
                             maori_pct = f"{(ind_matches[maori_cols].sum().sum() / ethnic_total * 100):.1f}%"
-                        # Pacific Peoples
-                        pacific_cols = [col for col in ind_matches.columns if 'pacific peoples' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
                         if pacific_cols:
                             pacific_pct = f"{(ind_matches[pacific_cols].sum().sum() / ethnic_total * 100):.1f}%"
-                        # Asian
-                        asian_cols = [col for col in ind_matches.columns if 'asian' in col.lower() and '2023' in col and 'ethnicity' in col.lower() and 'total' not in col.lower()]
                         if asian_cols:
                             asian_pct = f"{(ind_matches[asian_cols].sum().sum() / ethnic_total * 100):.1f}%"
                 # --- Occupation Profile ---
@@ -174,6 +195,23 @@ if st.button("🔍 Analyse Property", type="primary"):
                             if occ_cols:
                                 occ_sum = ind_matches[occ_cols].sum().sum()
                                 occupation_profile[label] = f"{(occ_sum / occ_total * 100):.1f}%"
+                # --- Income Sources (Personal Income Sources 2023) ---
+                income_source_total_cols = [col for col in ind_matches.columns if 'total stated' in col.lower() and 'sources of personal income' in col.lower() and '2023' in col]
+                if income_source_total_cols:
+                    income_total = ind_matches[income_source_total_cols[0]].sum()
+                    if income_total > 0:
+                        wages_cols = [col for col in ind_matches.columns if 'wages' in col.lower() and 'salary' in col.lower() and 'commissions' in col.lower() and '2023' in col]
+                        self_emp_cols = [col for col in ind_matches.columns if 'self-employment' in col.lower() and 'business' in col.lower() and '2023' in col]
+                        super_cols = [col for col in ind_matches.columns if 'superannuation' in col.lower() and '2023' in col]
+                        benefits_cols = [col for col in ind_matches.columns if 'other government benefits' in col.lower() and '2023' in col]
+                        if wages_cols:
+                            wages_salary_pct = f"{(ind_matches[wages_cols].sum().sum() / income_total * 100):.1f}%"
+                        if self_emp_cols:
+                            self_employed_pct = f"{(ind_matches[self_emp_cols].sum().sum() / income_total * 100):.1f}%"
+                        if super_cols:
+                            superannuation_pct = f"{(ind_matches[super_cols].sum().sum() / income_total * 100):.1f}%"
+                        if benefits_cols:
+                            benefits_pct = f"{(ind_matches[benefits_cols].sum().sum() / income_total * 100):.1f}%"
         # Elevation
         elev_url = f"https://api.opentopodata.org/v1/nzdem8m?locations={lat},{lon}"
         elev_response = requests.get(elev_url)
@@ -226,6 +264,7 @@ if st.button("🔍 Analyse Property", type="primary"):
             "short_address": short_address,
             "suburb": suburb,
             "main_suburb": main_suburb,
+            "display_suburb": suburb_display,  # For display with context
             "elevation": elevation,
             "risk": risk,
             "risk_color": risk_color,
@@ -247,6 +286,10 @@ if st.button("🔍 Analyse Property", type="primary"):
             "pacific_pct": pacific_pct,
             "asian_pct": asian_pct,
             "occupation_profile": occupation_profile,
+            "wages_salary_pct": wages_salary_pct,
+            "self_employed_pct": self_employed_pct,
+            "superannuation_pct": superannuation_pct,
+            "benefits_pct": benefits_pct,
             "lat": lat,
             "lon": lon
         }
@@ -254,7 +297,7 @@ if st.button("🔍 Analyse Property", type="primary"):
 # Display results
 if not st.session_state.map_data.empty and st.session_state.insights:
     i = st.session_state.insights
-    st.success(f"**Found:** {i['short_address']} ({i['suburb']})")
+    st.success(f"**Found:** {i['short_address']} ({i.get('display_suburb', i['suburb'])})")
     st.markdown(f"### Resilience Score: **{i['resilience_score']}/100**")
     st.progress(i['resilience_score'] / 100)
     with st.expander("How is Resilience Score calculated?"):
@@ -270,9 +313,9 @@ if not st.session_state.map_data.empty and st.session_state.insights:
         st.metric("Median Income", income_display)
     pop_display = f"{i['pop']:,} ({i['growth']}% growth)" if i['pop'] != "N/A" else "N/A"
     st.metric("Population (2023)", pop_display)
-    st.info(f"**Insight**: {i['risk_desc']} in {i['suburb']} (stats for main {i['main_suburb']})")
+    st.info(f"**Insight**: {i['risk_desc']} in {i.get('display_suburb', i['suburb'])} (stats for main {i['main_suburb']})")
     st.markdown("### Suburb Profile")
-    tab_edu, tab_age, tab_ethnic, tab_occ = st.tabs(["📚 Education", "👥 Age", "🌍 Ethnic Diversity", "💼 Occupation"])
+    tab_edu, tab_age, tab_ethnic, tab_occ, tab_income = st.tabs(["📚 Education", "👥 Age", "🌍 Ethnic Diversity", "💼 Occupation", "💰 Income Sources"])
     with tab_edu:
         col1, col2 = st.columns(2)
         with col1:
@@ -324,14 +367,24 @@ if not st.session_state.map_data.empty and st.session_state.insights:
                     st.metric(label, pct)
         else:
             st.write("N/A")
-    # AI Summary – now BEFORE the map
+    with tab_income:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("% Wages / Salary", i.get("wages_salary_pct", "N/A"))
+            st.metric("% Self-Employed", i.get("self_employed_pct", "N/A"))
+        with col2:
+            st.metric("% Superannuation / Pensions", i.get("superannuation_pct", "N/A"))
+            st.metric("% Government Benefits", i.get("benefits_pct", "N/A"))
+        st.caption("Main source of personal income – shows economic stability and lifestyle. Note: Percentages may exceed 100% because people can have multiple income sources in the NZ Census.")
+    # AI Summary – BEFORE the map
     st.markdown("### 🤖 AI Summary")
-    st.write(f"Property in {i['short_address']} ({i['suburb']}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
+    st.write(f"Property in {i['short_address']} ({i.get('display_suburb', i['suburb'])}) at {i['elevation']}m – {i['risk']} flood/coastal risk.")
     st.write(f"**Resilience Score**: {i['resilience_score']}/100 | **Climate Resilience**: {i['resilience']}")
     if i['income'] != "N/A" and i['pop'] != "N/A":
         st.write(f"Main suburb {i['main_suburb']}: {i['pop']:,} residents ({i['growth']}% growth), median income ${i['income']:,}.")
     with st.expander("🤓 AI Insights & Interpretation", expanded=True):
         insights = []
+        # Education
         if i['bachelor_higher'] != "N/A":
             higher_pct = float(i['bachelor_higher'].replace('%', ''))
             if higher_pct >= 40:
@@ -342,6 +395,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
                 insights.append("🎓 Solid education levels, typical of established suburbs.")
             else:
                 insights.append("🎓 Education levels below average – may indicate more trade or practical skill-based workforce.")
+        # Age / Family
         if i['age_le20'] != "N/A" and i['age_65plus'] != "N/A":
             young_pct = float(i['age_le20'].replace('%', ''))
             elderly_pct = float(i['age_65plus'].replace('%', ''))
@@ -353,6 +407,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
                 insights.append("👴 Relatively **young population** – low proportion of retirees.")
             elif elderly_pct >= 20:
                 insights.append("👴 **Mature community** with higher share of retirees – may suit downsizers.")
+        # Ethnic Diversity
         ethnic_note = ""
         if i.get("european_pct", "N/A") != "N/A":
             eur = float(i["european_pct"].replace('%', ''))
@@ -369,6 +424,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
             if i.get("pacific_pct", "N/A") != "N/A" and float(i["pacific_pct"].replace('%', '')) >= 10:
                 ethnic_note += " Notable Pacific Peoples population."
             insights.append(f"🌍 {ethnic_note}")
+        # Occupation
         if i.get("occupation_profile", {}):
             prof_pct = float(i["occupation_profile"].get("Professionals", "0%").replace('%', ''))
             mgr_pct = float(i["occupation_profile"].get("Managers", "0%").replace('%', ''))
@@ -379,6 +435,33 @@ if not st.session_state.map_data.empty and st.session_state.insights:
                 insights.append("💼 Strong professional and managerial workforce.")
             elif trades_pct >= 20:
                 insights.append("🔧 Skilled trades and practical occupations dominate.")
+        # Income Sources Insights (professional, handles overlap)
+        if i.get("wages_salary_pct", "N/A") != "N/A":
+            wages_pct = float(i["wages_salary_pct"].replace('%', ''))
+            self_pct = float(i.get("self_employed_pct", "0%").replace('%', ''))
+            super_pct = float(i.get("superannuation_pct", "0%").replace('%', ''))
+            benefits_pct = float(i.get("benefits_pct", "0%").replace('%', ''))
+            
+            # Primary source
+            if wages_pct >= 65:
+                insights.append("💰 **Primarily wage/salary driven** – stable employment base, typical of professional and corporate workers.")
+            elif self_pct >= 20:
+                insights.append("💰 **Self-employment dominant** – entrepreneurial and business-oriented community.")
+            elif super_pct >= 30:
+                insights.append("💰 **Retirement-focused** – superannuation is the main income for many residents.")
+            elif benefits_pct >= 20:
+                insights.append("💰 **Benefit-supported** – higher reliance on government assistance, often more affordable areas.")
+
+            # Secondary patterns
+            if wages_pct >= 55 and self_pct >= 12:
+                insights.append("🏢 **Mixed professional economy** – strong salaried workforce with notable entrepreneurial activity.")
+            if wages_pct >= 50 and benefits_pct >= 12:
+                insights.append("🤝 **Transitional income mix** – majority in employment with some relying on government support.")
+            if super_pct >= 15 and wages_pct >= 50:
+                insights.append("👴 **Working retirees** – many combine salary income with superannuation.")
+            if self_pct >= 10 and super_pct >= 15:
+                insights.append("🌟 **Financially independent** – blend of business income and retirement savings.")
+        # Income + Growth
         if i['income'] != "N/A" and i['growth'] != "N/A":
             income_val = i['income']
             growth_val = float(i['growth'].replace('+', '')) if isinstance(i['growth'], str) else 0
@@ -394,6 +477,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
                 insights.append("📈 Positive population growth – stable and expanding community.")
             elif growth_val < 0:
                 insights.append("📉 Declining population – may reflect changing demographics or outflow.")
+        # Final verdict
         higher_pct = float(i['bachelor_higher'].replace('%', '')) if i['bachelor_higher'] != "N/A" else 0
         elderly_pct = float(i['age_65plus'].replace('%', '')) if i['age_65plus'] != "N/A" else 100
         prof_mgr_pct = float(i["occupation_profile"].get("Professionals", "0%").replace('%', '')) + float(i["occupation_profile"].get("Managers", "0%").replace('%', '')) if i.get("occupation_profile") else 0
@@ -405,7 +489,7 @@ if not st.session_state.map_data.empty and st.session_state.insights:
             insights.append("⚖️ **Moderate resilience** – good affordability with some trade-offs.")
         for insight in insights:
             st.write(insight)
-    # Map with boundaries (now AFTER AI Summary)
+    # Map with boundaries (after AI Summary)
     boundaries_url = f"https://tiles.linz.govt.nz/services;key={LINZ_API_KEY}/tiles/v4/layer=50767/EPSG:3857/{{z}}/{{x}}/{{y}}.png"
     boundaries_html = f"""
     <div id="boundaries-map" style="width:100%; height:600px;"></div>
@@ -422,5 +506,4 @@ if not st.session_state.map_data.empty and st.session_state.insights:
     st.warning("Disclaimer: Public data – check official LIM/survey for accuracy.")
 else:
     st.info("Enter any NZ address or place and click Analyse – results stay!")
-st.caption("Free open data: LINZ + Open Topo | Built in NZ 🇳🇿")
-
+st.caption("Free open data: LINZ + Open Topo | Built in NZ 🇳🇿") ## prod ready
